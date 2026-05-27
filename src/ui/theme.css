@@ -1,5 +1,5 @@
 /* DeepSeek Zoograf Client - Dark Theme */
-/* Converted from src/ui/theme.py CSS_DARK */
+/* Textual CSS — standard selector { property: value; } syntax */
 
 $bg-dark: #1a1b26;
 $bg-darker: #16161e;
@@ -24,65 +24,71 @@ $accent-info: #7dcfff;
 $border-default: #414868;
 $border-focus: #7aa2f7;
 
-Default:
+Screen {
     background: $bg-dark;
     color: $text-primary;
+}
 
-Screen:
-    background: $bg-dark;
-
-Header:
+#header {
     height: 1;
     background: $brand-primary 30%;
     content-align: center middle;
+}
 
-Footer:
+#footer {
     background: $bg-darker;
     color: $text-secondary;
+}
 
-#chat-widget:
+#chat-widget {
     width: 1fr;
     height: 1fr;
     padding: 1;
     background: $bg-dark;
+}
 
-#input-area:
+#input-area {
     height: 3;
     width: 1fr;
     background: $bg-light;
     padding: 1;
+}
 
-#input-area Input:
+#input-area Input {
     width: 1fr;
     color: $text-primary;
+}
 
-#status-bar:
+#status-bar {
     height: 1;
     background: $bg-darker;
     color: $text-secondary;
+}
 
-/* Message styles */
-.message-user:
+.message-user {
     background: $bg-message-user;
     border-left: solid $text-accent-user;
     margin-bottom: 1;
     padding: 1;
+}
 
-.message-bot:
+.message-bot {
     background: $bg-message-bot;
     border-left: solid $text-accent-bot;
     margin-bottom: 1;
     padding: 1;
+}
 
-/* Code blocks */
-RichLog:
+RichLog {
     background: $bg-darker;
     padding: 1;
+}
 
-/* Focus states */
-Input:focus:
+Input:focus {
     border: none;
     border-bottom: solid $brand-primary;
+}
 
-Button:focus:
+Button:focus {
     background: $brand-primary;
+}
