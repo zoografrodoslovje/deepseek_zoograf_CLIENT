@@ -18,13 +18,14 @@ class TestFileSystemTools:
         shutil.rmtree(temp_path, ignore_errors=True)
 
     def test_read_file_exists(self, temp_dir):
-        """Test reading an existing file."""
+        """Test reading an existing file using absolute path (bypasses Config.ROOT_DIR)."""
         from src.tools.filesystem import read_file
 
         test_file = temp_dir / "test.txt"
         test_file.write_text("Hello World")
 
-        result = read_file(str(test_file.relative_to(temp_dir)))
+        # Use absolute path so read_file uses Path(path) directly
+        result = read_file(str(test_file))
         assert "Successfully read" in result
         assert "Hello World" in result
 
@@ -48,11 +49,12 @@ class TestFileSystemTools:
         assert "file2.py" in result
 
     def test_write_file(self, temp_dir):
-        """Test writing to a file."""
+        """Test writing to a file with absolute path."""
         from src.tools.filesystem import write_file
 
         relative_path = "new_test.txt"
-        result = write_file(relative_path, "New content", str(temp_dir))
+        full_path = str(temp_dir / relative_path)
+        result = write_file(full_path, "New content")
 
         assert "Successfully wrote" in result
         assert (temp_dir / relative_path).exists()
@@ -82,4 +84,7 @@ class TestRegistry:
         # Each tool should have required structure
         for tool in tools:
             assert "type" in tool
-            assert "function" in tool["function"]
+            assert "function" in tool
+            assert "name" in tool["function"]
+            assert "description" in tool["function"]
+            assert "parameters" in tool["function"]

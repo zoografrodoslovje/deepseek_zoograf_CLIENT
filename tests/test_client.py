@@ -9,16 +9,18 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
+@pytest.fixture
+def mock_config():
+    """Mock configuration at module level."""
+    with patch("src.core.client.Config") as mock:
+        mock.DEEPSEEK_API_KEY = "test-api-key"
+        mock.DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+        mock.DEFAULT_MODEL = "deepseek-chat"
+        yield mock
+
+
 class TestDeepSeekClient:
     """Tests for DeepSeekClient class."""
-
-    @pytest.fixture
-    def mock_config(self):
-        """Mock configuration."""
-        with patch("src.core.client.Config") as mock_config:
-            mock_config.DEEPSEEK_API_KEY = "test-api-key"
-            mock_config.DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-            yield mock_config
 
     @pytest.mark.asyncio
     async def test_initialization_with_api_key(self, mock_config):
@@ -34,12 +36,13 @@ class TestDeepSeekClient:
         """Test streaming chat response."""
         from core.client import DeepSeekClient
 
-        client = DeepSeekClient()
+        client = DeepSeekClient(api_key="test-key")
 
         # Mock the stream response
         mock_chunk = MagicMock()
         mock_chunk.choices[0].delta.content = "Hello"
         mock_chunk.usage.prompt_tokens = 10
+        mock_chunk.created = 1234567890
 
         async def mock_stream():
             yield mock_chunk
@@ -54,7 +57,6 @@ class TestDeepSeekClient:
 
     def test_get_model_options(self, mock_config):
         """Test getting available models."""
-        from core.client import DeepSeekClient
         from core.config import Config
 
         options = Config.get_model_options()

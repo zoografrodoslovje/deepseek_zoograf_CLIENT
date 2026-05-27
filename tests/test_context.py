@@ -23,13 +23,14 @@ class TestContextManager:
         assert len(manager.messages) == 2
         assert manager.messages[0]["role"] == "user"
 
-    def test_clear(self, mock_client):
+    @pytest.mark.asyncio
+    async def test_clear(self, mock_client):
         """Test clearing all messages."""
         from src.core.context import ContextManager
 
         manager = ContextManager(mock_client)
         manager.add_message("user", "Test")
-        manager.clear()
+        await manager.clear()
 
         assert len(manager.messages) == 0
 
