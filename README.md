@@ -31,12 +31,12 @@
 
 ### PowerShell (Recommended)
 ```powershell
-iex (iwr -Uri https://raw.githubusercontent.com/zoografrodoslovje/deepseek_zoograf_CLIENT/main/install-online.ps1)
+iex (iwr -UseBasicParsing -Uri https://raw.githubusercontent.com/zoografrodoslovje/deepseek_zoograf_CLIENT/main/install-online.ps1)
 ```
 
 This single command:
 1. ✅ Checks your Python installation
-2. ✅ Downloads the latest client (git or ZIP)
+2. ✅ Downloads the latest client (git or ZIP fallback)
 3. ✅ Creates an isolated virtual environment
 4. ✅ Installs all dependencies
 5. ✅ Opens `.env` so you can paste your API key

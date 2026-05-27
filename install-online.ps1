@@ -4,20 +4,21 @@
 .DESCRIPTION
     Downloads and installs the HERO UI POR DeepSeek Agentic Terminal Client.
     Run this from PowerShell with:
-        iex (iwr -Uri https://raw.githubusercontent.com/zoografrodoslovje/deepseek_zoograf_CLIENT/main/install-online.ps1)
+        iex (iwr -UseBasicParsing -Uri https://raw.githubusercontent.com/zoografrodoslovje/deepseek_zoograf_CLIENT/main/install-online.ps1)
 .NOTES
     Requires: Windows 10+, PowerShell 5.1+, Python 3.10+
 #>
 
 $Host.UI.RawUI.WindowTitle = "DeepSeek Zoograf Client - One-Shot Install"
-$ErrorActionPreference = "Stop"
 
-$GREEN  = "`e[92m"
-$YELLOW = "`e[93m"
-$RED    = "`e[91m"
-$CYAN   = "`e[96m"
-$BOLD   = "`e[1m"
-$NC     = "`e[0m"
+# --- ANSI colors (PS 5.1 compatible: [char]27 instead of `e) ---
+$ESC = [char]27
+$GREEN  = "${ESC}[92m"
+$YELLOW = "${ESC}[93m"
+$RED    = "${ESC}[91m"
+$CYAN   = "${ESC}[96m"
+$BOLD   = "${ESC}[1m"
+$NC     = "${ESC}[0m"
 
 Write-Host "${BOLD}===========================================${NC}"
 Write-Host "${BOLD}   DeepSeek Zoograf Client                 ${NC}"
@@ -54,17 +55,18 @@ $repoUrl = "https://github.com/zoografrodoslovje/deepseek_zoograf_CLIENT"
 $destDir = Join-Path (Get-Location) "deepseek_zoograf_CLIENT"
 
 if (Test-Path $destDir) {
-    Write-Host "  Directory exists. Pulling latest..."
+    Write-Host "  Directory exists. Updating..."
     Push-Location $destDir
-    & git pull 2>&1 | Out-Null
+    # Capture stderr from git into a string so it doesn't trigger errors
+    $gitErr = $null
+    $null = & git pull 2>&1
     Pop-Location
 } else {
-    # Try git first, fall back to ZIP download
     if (Get-Command git -ErrorAction SilentlyContinue) {
         Write-Host "  Cloning with git..."
-        & git clone $repoUrl 2>&1
+        $null = & git clone $repoUrl 2>&1
     } else {
-        Write-Host "  Downloading ZIP (git not found)..."
+        Write-Host "  Git not found, downloading ZIP..."
         $zipUrl = "$repoUrl/archive/refs/heads/main.zip"
         $zipPath = Join-Path $env:TEMP "ds-zoograf.zip"
         Remove-Item $zipPath -ErrorAction SilentlyContinue
@@ -72,7 +74,11 @@ if (Test-Path $destDir) {
         $webClient = New-Object System.Net.WebClient
         $webClient.DownloadFile($zipUrl, $zipPath)
         Expand-Archive $zipPath -DestinationPath (Get-Location) -Force
-        Rename-Item (Join-Path (Get-Location) "deepseek_zoograf_CLIENT-main") $destDir -ErrorAction SilentlyContinue
+        $extracted = Join-Path (Get-Location) "deepseek_zoograf_CLIENT-main"
+        if (Test-Path $extracted) {
+            Remove-Item $destDir -Recurse -Force -ErrorAction SilentlyContinue
+            Rename-Item $extracted $destDir
+        }
     }
 }
 
@@ -90,7 +96,7 @@ Write-Host ""
 Write-Host "${CYAN}[3/4]${NC} Setting up Python virtual environment..."
 
 if (Test-Path "venv") {
-    Write-Host "  Virtual environment already exists, recreating..."
+    Write-Host "  Removing old virtual environment..."
     Remove-Item -Recurse -Force "venv"
 }
 python -m venv venv
@@ -106,10 +112,11 @@ Write-Host "${GREEN}[V]${NC} Virtual environment created"
 Write-Host ""
 Write-Host "  Installing dependencies..."
 $pip = Join-Path (Get-Location) "venv\Scripts\pip.exe"
-& $pip install --upgrade pip | Out-Null
-& $pip install -r requirements.txt
+$null = & $pip install --upgrade pip 2>&1
+$result = & $pip install -r requirements.txt 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "${RED}[X] Failed to install dependencies${NC}"
+    Write-Host "  Error: $result"
     Pop-Location
     Read-Host "Press Enter to exit"
     exit 1
@@ -131,7 +138,7 @@ if (-not (Test-Path ".env")) {
     Write-Host ""
     Write-Host "  Get a free key: ${CYAN}https://platform.deepseek.com/api_keys${NC}"
     Write-Host ""
-    notepad .env
+    & notepad .env
 } else {
     Write-Host "${GREEN}[V]${NC} .env already configured"
 }
@@ -147,8 +154,8 @@ Write-Host "${GREEN}${BOLD}                                          ${NC}"
 Write-Host "${GREEN}${BOLD}     cd deepseek_zoograf_CLIENT            ${NC}"
 Write-Host "${GREEN}${BOLD}     .\run.bat                              ${NC}"
 Write-Host "${GREEN}${BOLD}                                          ${NC}"
-Write-Host "${GREEN}${BOLD}  Or activate first, then run:            ${NC}"
-Write-Host "${GREEN}${BOLD}     venv\Scripts\activate                 ${NC}"
+Write-Host "${GREEN}${BOLD}  Or manually:                             ${NC}"
+Write-Host "${GREEN}${BOLD}     venv\Scripts\activate                  ${NC}"
 Write-Host "${GREEN}${BOLD}     python main.py                        ${NC}"
 Write-Host "${GREEN}${BOLD}                                          ${NC}"
 Write-Host "${GREEN}${BOLD}===========================================${NC}"

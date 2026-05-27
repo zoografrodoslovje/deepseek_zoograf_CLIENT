@@ -1,20 +1,23 @@
-﻿<#
+<#
 .SYNOPSIS
     DeepSeek Zoograf Client - Windows PowerShell Installer
 .DESCRIPTION
     Sets up the HERO UI POR DeepSeek Agentic Terminal Client on Windows.
     Creates venv, installs deps, configures API key.
+.NOTES
+    Compatible with PowerShell 5.1+ and PowerShell 7+
 #>
 
 $Host.UI.RawUI.WindowTitle = "DeepSeek Zoograf Client - Setup"
-$ErrorActionPreference = "Stop"
 
-$GREEN  = "`e[92m"
-$YELLOW = "`e[93m"
-$RED    = "`e[91m"
-$CYAN   = "`e[96m"
-$BOLD   = "`e[1m"
-$NC     = "`e[0m"
+# --- ANSI colors (PS 5.1 compatible: [char]27 instead of `e) ---
+$ESC = [char]27
+$GREEN  = "${ESC}[92m"
+$YELLOW = "${ESC}[93m"
+$RED    = "${ESC}[91m"
+$CYAN   = "${ESC}[96m"
+$BOLD   = "${ESC}[1m"
+$NC     = "${ESC}[0m"
 
 Write-Host "${BOLD}===========================================${NC}"
 Write-Host "${BOLD}   DeepSeek Zoograf Client - Setup        ${NC}"
@@ -77,10 +80,11 @@ Write-Host "${CYAN}[3/5]${NC} Installing Python dependencies..."
 Write-Host "  This may take a minute..."
 
 $pip = Join-Path (Get-Location) "venv\Scripts\pip.exe"
-& $pip install --upgrade pip | Out-Null
-& $pip install -r requirements.txt
+$null = & $pip install --upgrade pip 2>&1
+$result = & $pip install -r requirements.txt 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "${RED}[X] Failed to install dependencies${NC}"
+    Write-Host "  Error: $result"
     Read-Host "Press Enter to exit"
     exit 1
 }
@@ -101,7 +105,7 @@ if (-not (Test-Path ".env")) {
     Write-Host ""
     Write-Host "  Get a key at: ${CYAN}https://platform.deepseek.com/api_keys${NC}"
     Write-Host ""
-    notepad .env
+    & notepad .env
 } else {
     Write-Host "${GREEN}[V]${NC} .env already exists"
 }
