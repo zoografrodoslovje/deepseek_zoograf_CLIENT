@@ -1,6 +1,7 @@
 """Unit Tests for Client Module"""
 
 import pytest
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import module under test
