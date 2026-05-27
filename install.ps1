@@ -10,7 +10,7 @@
 
 $Host.UI.RawUI.WindowTitle = "DeepSeek Zoograf Client - Setup"
 
-# --- ANSI colors (PS 5.1 compatible: [char]27 instead of `e) ---
+# --- ANSI colors (PS 5.1 compatible: using [char]27) ---
 $ESC = [char]27
 $GREEN  = "${ESC}[92m"
 $YELLOW = "${ESC}[93m"

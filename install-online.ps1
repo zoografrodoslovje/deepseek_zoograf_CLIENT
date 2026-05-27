@@ -11,7 +11,7 @@
 
 $Host.UI.RawUI.WindowTitle = "DeepSeek Zoograf Client - One-Shot Install"
 
-# --- ANSI colors (PS 5.1 compatible: [char]27 instead of `e) ---
+# --- ANSI colors (PS 5.1 compatible: using [char]27) ---
 $ESC = [char]27
 $GREEN  = "${ESC}[92m"
 $YELLOW = "${ESC}[93m"
@@ -52,13 +52,21 @@ Write-Host ""
 Write-Host "${CYAN}[2/4]${NC} Downloading DeepSeek Zoograf Client..."
 
 $repoUrl = "https://github.com/zoografrodoslovje/deepseek_zoograf_CLIENT"
-$destDir = Join-Path (Get-Location) "deepseek_zoograf_CLIENT"
 
-if (Test-Path $destDir) {
+# Figure out where the repo is:
+#   1) Already inside the repo dir (has main.py)
+#   2) Sibling directory deepseek_zoograf_CLIENT exists
+#   3) Neither — clone fresh
+$repoDir = Get-Location
+$siblingDir = Join-Path $repoDir "deepseek_zoograf_CLIENT"
+
+if (Test-Path (Join-Path $repoDir "main.py")) {
+    Write-Host "  Already in project directory. Updating..."
+    $null = & git pull 2>&1
+} elseif (Test-Path $siblingDir) {
     Write-Host "  Directory exists. Updating..."
-    Push-Location $destDir
-    # Capture stderr from git into a string so it doesn't trigger errors
-    $gitErr = $null
+    $repoDir = $siblingDir
+    Push-Location $repoDir
     $null = & git pull 2>&1
     Pop-Location
 } else {
@@ -76,20 +84,22 @@ if (Test-Path $destDir) {
         Expand-Archive $zipPath -DestinationPath (Get-Location) -Force
         $extracted = Join-Path (Get-Location) "deepseek_zoograf_CLIENT-main"
         if (Test-Path $extracted) {
-            Remove-Item $destDir -Recurse -Force -ErrorAction SilentlyContinue
-            Rename-Item $extracted $destDir
+            Remove-Item $siblingDir -Recurse -Force -ErrorAction SilentlyContinue
+            Rename-Item $extracted $siblingDir
         }
     }
+    # After clone or ZIP extract, the repo is in the sibling subdirectory
+    if (Test-Path $siblingDir) { $repoDir = $siblingDir }
 }
 
-if (-not (Test-Path $destDir)) {
+if (-not (Test-Path $repoDir)) {
     Write-Host "${RED}[X] Failed to download the client${NC}"
     Read-Host "Press Enter to exit"
     exit 1
 }
 
-Push-Location $destDir
-Write-Host "${GREEN}[V]${NC} Downloaded to: $destDir"
+Push-Location $repoDir
+Write-Host "${GREEN}[V]${NC} Downloaded to: $repoDir"
 
 # --- Step 3: Install dependencies ------------
 Write-Host ""
