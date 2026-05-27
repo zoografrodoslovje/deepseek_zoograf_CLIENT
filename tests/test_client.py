@@ -11,12 +11,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 @pytest.fixture
 def mock_config():
-    """Mock configuration at module level."""
-    with patch("src.core.client.Config") as mock:
-        mock.DEEPSEEK_API_KEY = "test-api-key"
-        mock.DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-        mock.DEFAULT_MODEL = "deepseek-chat"
-        yield mock
+    """Mock configuration by patching Config class attributes directly."""
+    with patch("src.core.config.Config.DEEPSEEK_API_KEY", "test-api-key"):
+        with patch("src.core.config.Config.DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"):
+            with patch("src.core.config.Config.DEFAULT_MODEL", "deepseek-chat"):
+                yield
 
 
 class TestDeepSeekClient:
@@ -29,7 +28,7 @@ class TestDeepSeekClient:
 
         client = DeepSeekClient()
         assert client is not None
-        assert client.config.DEEPSEEK_API_KEY == "test-api-key"
+        assert client.current_model == "deepseek-chat"
 
     @pytest.mark.asyncio
     async def test_stream_response(self, mock_config):
@@ -38,16 +37,26 @@ class TestDeepSeekClient:
 
         client = DeepSeekClient(api_key="test-key")
 
-        # Mock the stream response
+        # Mock chunk matching ChatCompletionChunk shape
         mock_chunk = MagicMock()
-        mock_chunk.choices[0].delta.content = "Hello"
-        mock_chunk.usage.prompt_tokens = 10
+        delta = MagicMock()
+        delta.content = "Hello"
+        delta.reasoning_content = None
+        delta.tool_calls = None
+        mock_chunk.choices = [MagicMock(delta=delta)]
+        mock_chunk.usage = MagicMock(prompt_tokens=10)
         mock_chunk.created = 1234567890
 
         async def mock_stream():
             yield mock_chunk
 
-        with patch.object(client._client.chat.completions, "create", return_value=mock_stream()):
+        # create() is awaited and must return an async iterable (async generator)
+        async def mock_create(*args, **kwargs):
+            return mock_stream()
+
+        with patch.object(
+            client._client.chat.completions, "create", new=mock_create
+        ):
             chunks = []
             async for chunk_type, chunk_data in client.chat_stream([]):
                 if chunk_type == "content":
@@ -55,7 +64,7 @@ class TestDeepSeekClient:
 
             assert "".join(chunks) == "Hello"
 
-    def test_get_model_options(self, mock_config):
+    def test_get_model_options(self):
         """Test getting available models."""
         from core.config import Config
 
