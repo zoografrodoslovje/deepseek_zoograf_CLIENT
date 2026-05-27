@@ -136,7 +136,7 @@ class DeepSeekApp(App):
             f"Available sessions:\n{session_list}\n\nUse the ID to load (manual selection for now)."
         )
 
-    async def on_input_submitted(self, event: InputArea.Submit) -> None:
+    async def on_input_area_submit(self, event: InputArea.Submit) -> None:
         """Handle input submission."""
         await self._handle_message(event)
 

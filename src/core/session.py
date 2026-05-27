@@ -83,7 +83,7 @@ class SessionManager:
             metadata = existing.get("metadata", {}) if existing else {}
 
             session_data = {
-                **metadata,
+                "metadata": metadata,
                 "messages": messages,
                 "tool_calls": tool_calls,
                 "updated_at": datetime.now().isoformat(),

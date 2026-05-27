@@ -4,10 +4,18 @@ from textual.app import ComposeResult
 from textual.widgets import Input, Button
 from textual.containers import Horizontal
 from textual.binding import Binding
+from textual.message import Message
 
 
 class InputArea(Horizontal):
     """Custom input area with message history support."""
+
+    class Submit(Message):
+        """Posted when the user presses Enter to submit input."""
+
+        def __init__(self, text: str) -> None:
+            super().__init__()
+            self.text = text
 
     CSS = """
     #input-area {
@@ -45,7 +53,7 @@ class InputArea(Horizontal):
 
     async def on_mount(self):
         """Focus input field when mounted."""
-        await self.query_one("#input-field", Input).focus()
+        self.query_one("#input-field", Input).focus()
 
     @property
     def text(self) -> str:
@@ -59,7 +67,7 @@ class InputArea(Horizontal):
 
     def action_submit(self):
         """Handle Enter key press."""
-        self.post_message("submit")
+        self.post_message(self.Submit(self.text))
 
     def action_newline(self):
         """Handle Shift+Enter for new line."""

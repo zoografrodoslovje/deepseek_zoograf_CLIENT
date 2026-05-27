@@ -86,5 +86,5 @@ class StatusBar(Container):
         status_class = "connection-status" if is_connected else "connection-error"
 
         self.query_one("#connection-display", Static).update(
-            f"[span class='{status_class}' ● ] {status_text}[/span]"
+            f"[span class='{status_class}']● {status_text}[/span]"
         )

@@ -7,6 +7,7 @@ Run this script or use `ds-cli` command after installation.
 """
 
 import sys
+import asyncio
 from pathlib import Path
 
 # Ensure src is in path
@@ -114,6 +115,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import asyncio
-
     main()
