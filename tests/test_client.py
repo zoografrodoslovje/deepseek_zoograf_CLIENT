@@ -12,9 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 @pytest.fixture
 def mock_config():
     """Mock configuration by patching Config class attributes directly."""
-    with patch("src.core.config.Config.DEEPSEEK_API_KEY", "test-api-key"):
-        with patch("src.core.config.Config.DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"):
-            with patch("src.core.config.Config.DEFAULT_MODEL", "deepseek-chat"):
+    with patch("core.config.Config.DEEPSEEK_API_KEY", "test-api-key"):
+        with patch("core.config.Config.DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"):
+            with patch("core.config.Config.DEFAULT_MODEL", "deepseek-chat"):
                 yield
 
 
@@ -50,7 +50,7 @@ class TestDeepSeekClient:
         async def mock_stream():
             yield mock_chunk
 
-        # create() is awaited and must return an async iterable (async generator)
+        # create() is awaited and must return an async iterable
         async def mock_create(*args, **kwargs):
             return mock_stream()
 
