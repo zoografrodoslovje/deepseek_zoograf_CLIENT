@@ -1,30 +1,55 @@
-"""Configuration loader — reads .env and provides settings."""
+"""Configuration Module - Environment and Settings"""
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from typing import Optional
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class Config:
-    """Application configuration loaded from .env and environment."""
+    """Application configuration loaded from environment variables."""
 
-    def __init__(self, env_path: str | None = None):
-        if env_path is None:
-            env_path = str(Path(__file__).parent.parent.parent / ".env")
-        load_dotenv(env_path)
+    # API Configuration
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_BASE_URL: str = os.getenv(
+        "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"
+    )
+    DEFAULT_MODEL: str = os.getenv("DEFAULT_MODEL", "deepseek-chat")
 
-        self.api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
-        self.base_url: str = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-        self.default_model: str = os.getenv("DEFAULT_MODEL", "deepseek-chat")
-        self.max_tokens: int = int(os.getenv("MAX_TOKENS", "64000"))
-        self.max_output_tokens: int = int(os.getenv("MAX_OUTPUT_TOKENS", "4096"))
-        self.temperature: float = float(os.getenv("TEMPERATURE", "0.7"))
-        self.log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    # Context Configuration
+    MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "64000"))
 
-    def is_configured(self) -> bool:
-        return bool(self.api_key) and self.api_key != "sk-your-key-here"
+    # Logging Configuration
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    def get_client_kwargs(self) -> dict:
-        return {
-            "api_key": self.api_key,
-            "base_url": self.base_url,
-        }
+    # Application Root
+    ROOT_DIR: Path = Path(__file__).parent.parent.parent
+    PROJECT_DIR: Path = ROOT_DIR / "src"
+
+    @classmethod
+    def validate(cls) -> tuple[bool, list[str]]:
+        """Validate configuration. Returns (is_valid, list_of_errors)."""
+        errors = []
+
+        if not cls.DEEPSEEK_API_KEY:
+            errors.append("DEEPSEEK_API_KEY is required but not set in .env file")
+
+        return len(errors) == 0, errors
+
+    @classmethod
+    def get_model_options(cls) -> list[str]:
+        """Return available model options."""
+        return ["deepseek-chat", "deepseek-reasoner"]
+
+    @property
+    def is_api_key_set(self) -> bool:
+        """Check if API key is configured."""
+        return bool(self.DEEPSEEK_API_KEY.strip())
+
+    @property
+    def supports_reasoning(self) -> bool:
+        """Check if reasoning model is supported."""
+        return "deepseek-reasoner" in self.get_model_options()

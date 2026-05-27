@@ -1,78 +1,108 @@
-"""Token counting and context window management."""
-import tiktoken
-from typing import Optional
+"""Context Management - Token Counting and Window Management"""
+
+import asyncio
+from typing import Any, Optional
+from .client import DeepSeekClient
 
 
 class ContextManager:
-    """Tracks token usage and manages context window limits."""
+    """Manages conversation context and token usage."""
 
-    def __init__(self, max_tokens: int = 64000, model: str = "deepseek-chat"):
-        self.max_tokens = max_tokens
-        self.summary_threshold = int(max_tokens * 0.75)
-        self._prompt_tokens = 0
-        self._completion_tokens = 0
-        try:
-            self._tokenizer = tiktoken.get_encoding("cl100k_base")
-        except Exception:
-            self._tokenizer = None
+    def __init__(self, client: DeepSeekClient):
+        """Initialize context manager with a DeepSeekClient.
 
-    def count_tokens(self, text: str) -> int:
-        """Approximate token count."""
-        if self._tokenizer:
-            return len(self._tokenizer.encode(text))
-        return len(text) // 4  # rough estimate
-
-    def count_messages_tokens(self, messages: list[dict]) -> int:
-        """Count tokens in a list of messages (approximate)."""
-        total = 0
-        for msg in messages:
-            total += self.count_tokens(str(msg.get("content", "")))
-            total += self.count_tokens(str(msg.get("role", "")))
-            if msg.get("name"):
-                total += self.count_tokens(msg["name"])
-            # Tool calls overhead
-            if msg.get("tool_calls"):
-                total += 20
-            if msg.get("tool_call_id"):
-                total += 10
-        # Per-message overhead (~4 tokens per message)
-        total += len(messages) * 4
-        return total
-
-    def add_usage(self, prompt_tokens: int, completion_tokens: int):
-        self._prompt_tokens += prompt_tokens
-        self._completion_tokens += completion_tokens
+        Args:
+            client: DeepSeek API client instance
+        """
+        self._client = client
+        self._messages: list[dict[str, Any]] = []
+        self._token_count: int = 0
 
     @property
-    def total_tokens(self) -> int:
-        return self._prompt_tokens + self._completion_tokens
+    def messages(self) -> list[dict[str, Any]]:
+        """Get current message history."""
+        return self._messages.copy()
 
-    def should_summarize(self, messages: list[dict]) -> bool:
-        """Check if approaching context limit."""
-        current = self.count_messages_tokens(messages)
-        return current > self.summary_threshold
+    @property
+    def token_count(self) -> int:
+        """Get approximate token count."""
+        return self._token_count
 
-    def needs_truncation(self, messages: list[dict]) -> bool:
-        current = self.count_messages_tokens(messages)
-        return current > self.max_tokens - 2000  # leave room for response
+    def add_message(self, role: str, content: str) -> None:
+        """Add a message to the conversation history.
 
-    def truncate_messages(self, messages: list[dict]) -> list[dict]:
-        """Truncate oldest messages while keeping system prompt."""
-        if not self.needs_truncation(messages):
-            return messages
+        Args:
+            role: Message role ('user', 'assistant', 'tool', 'system')
+            content: Message content
+        """
+        self._messages.append({"role": role, "content": content})
+        # Rough token estimation (1 token ≈ 4 characters for ASCII)
+        self._token_count += len(content) // 4
 
-        # Keep system prompt (first message if it's system)
-        keep = []
-        rest = list(messages)
-        if rest and rest[0].get("role") == "system":
-            keep.append(rest.pop(0))
+    async def check_context_limit(self) -> tuple[bool, int]:
+        """Check if context limit is approached.
 
-        # Remove oldest user/assistant pairs until under limit
-        while rest and self.count_messages_tokens(keep + rest) > self.max_tokens - 2000:
-            rest.pop(0)
+        Returns:
+            Tuple of (is_within_limit, remaining_tokens)
+        """
+        stats = await self._client.get_usage_stats()
+        remaining = stats["remaining"]
+        return (remaining > 0, remaining)
 
-        return keep + rest
+    async def summarize_old_messages(self) -> None:
+        """Summarize older messages to free up context space."""
+        if len(self._messages) < 3:
+            return
 
-    def reset(self):
-        self._prompt_tokens = 0
-        self._completion_tokens = 0
+        # Keep the last 2 user/assistant pairs
+        keep_last = 4
+        messages_to_summarize = self._messages[:-keep_last]
+
+        if not messages_to_summarize:
+            return
+
+        system_prompt = {
+            "role": "system",
+            "content": "Summarize this conversation history into brief bullet points.",
+        }
+
+        summary_content = "\n".join(
+            f"- {m['role']}: {m['content']}" for m in messages_to_summarize
+        )
+
+        try:
+            response = await self._client.chat_complete(
+                messages=[system_prompt, {"role": "user", "content": summary_content}]
+            )
+
+            new_system_message = {
+                "role": "system",
+                "content": f"Conversation history summarized:\n{response['content']}",
+            }
+
+            # Update messages
+            self._messages = [new_system_message] + self._messages[-keep_last:]
+            self._token_count = len(summary_content) // 4
+
+        except Exception as e:
+            print(f"Error summarizing context: {e}")
+
+    async def get_messages_for_api(self) -> list[dict[str, Any]]:
+        """Prepare messages for API call with context management."""
+        # Check if we need to summarize
+        within_limit, _ = await self.check_context_limit()
+
+        if not within_limit:
+            await self.summarize_old_messages()
+
+        return self.messages.copy()
+
+    async def clear(self) -> None:
+        """Clear all message history."""
+        self._messages.clear()
+        self._token_count = 0
+
+    async def add_system_message(self, content: str) -> None:
+        """Add a system-level instruction."""
+        self._messages.insert(0, {"role": "system", "content": content})
+        self._token_count += len(content) // 4

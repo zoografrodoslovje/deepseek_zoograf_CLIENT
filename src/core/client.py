@@ -1,123 +1,196 @@
-"""AsyncOpenAI wrapper for DeepSeek API with streaming and tool calling."""
-import json
-from typing import AsyncGenerator, Callable
-from openai import AsyncOpenAI
-from openai.types.chat import ChatCompletionMessageParam
-from src.core.config import Config
+"""DeepSeek API Client - AsyncOpenAI Wrapper"""
+
+import os
+from typing import Any, AsyncGenerator, Optional
+from openai import AsyncOpenAI, NotFoundError, RateLimitError
+from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
+from .config import Config
+
+API_RETRIES = 3
 
 
 class DeepSeekClient:
-    """Manages communication with the DeepSeek API."""
+    """Asynchronous client for DeepSeek API."""
 
-    def __init__(self, config: Config):
-        self.config = config
-        self.client = AsyncOpenAI(**config.get_client_kwargs())
-        self.model = config.default_model
-        self._tools: list[dict] = []
-        self._tool_handlers: dict[str, Callable] = {}
-        self._last_response_headers = {}
-
-    def register_tools(self, tools: list[dict], handlers: dict[str, Callable]):
-        self._tools = tools
-        self._tool_handlers = handlers
-
-    async def stream_chat(
+    def __init__(
         self,
-        messages: list[dict],
-    ) -> AsyncGenerator[dict, None]:
-        """Stream a chat response, yielding content chunks and tool calls."""
-        kwargs = {
-            "model": self.model,
-            "messages": messages,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
-        if self._tools:
-            kwargs["tools"] = self._tools
-            kwargs["tool_choice"] = "auto"
+        api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
+        model: str | None = None,
+    ):
+        """Initialize the DeepSeek client.
 
-        try:
-            stream = await self.client.chat.completions.create(**kwargs)
-        except Exception as e:
-            yield {"type": "error", "content": str(e)}
-            return
+        Args:
+            api_key: API key (defaults to DEEPSEEK_API_KEY env var)
+            base_url: Base URL (defaults to DEEPSEEK_BASE_URL env var)
+            model: Default model to use
+        """
+        self._api_key = api_key or Config.DEEPSEEK_API_KEY
+        self._base_url = base_url or Config.DEEPSEEK_BASE_URL
+        self._model = model or Config.DEFAULT_MODEL
 
-        tool_calls_buffer: dict[int, dict] = {}
-        finish_reason = None
+        if not self._api_key:
+            raise ValueError("API key is required")
 
-        async for chunk in stream:
-            if hasattr(chunk, "usage") and chunk.usage:
-                yield {"type": "usage", "prompt_tokens": chunk.usage.prompt_tokens or 0,
-                       "completion_tokens": chunk.usage.completion_tokens or 0}
+        self._client = AsyncOpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+        )
 
-            if not chunk.choices:
-                continue
+        # Track context tokens
+        self._tokens_used: int = 0
+        self._last_response_time: float | None = None
 
-            delta = chunk.choices[0].delta
-            finish_reason = chunk.choices[0].finish_reason
+    @property
+    def current_model(self) -> str:
+        """Get current model name."""
+        return self._model
 
-            # Reasoning content (R1 model)
-            if hasattr(delta, "reasoning_content") and delta.reasoning_content:
-                yield {"type": "reasoning", "content": delta.reasoning_content}
+    @property
+    def tokens_used(self) -> int:
+        """Get total tokens used in current session."""
+        return self._tokens_used
 
-            # Regular content
-            if delta.content:
-                yield {"type": "content", "content": delta.content}
+    @property
+    def config(self) -> Config:
+        """Get application configuration."""
+        return Config
 
-            # Tool calls
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    idx = tc.index
-                    if idx not in tool_calls_buffer:
-                        tool_calls_buffer[idx] = {
-                            "id": tc.id or "",
-                            "function": {"name": "", "arguments": ""},
-                        }
-                    if tc.id:
-                        tool_calls_buffer[idx]["id"] = tc.id
-                    if tc.function:
-                        if tc.function.name:
-                            tool_calls_buffer[idx]["function"]["name"] += tc.function.name
-                        if tc.function.arguments:
-                            tool_calls_buffer[idx]["function"]["arguments"] += tc.function.arguments
+    async def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None = None,
+        tools: list[dict] | None = None,
+    ) -> AsyncGenerator[tuple[str, Any], None]:
+        """Stream chat completion response from DeepSeek.
 
-        # Process tool calls if any
-        if finish_reason == "tool_calls" and tool_calls_buffer:
-            for tc in tool_calls_buffer.values():
-                tool_name = tc["function"]["name"]
-                try:
-                    tool_args = json.loads(tc["function"]["arguments"])
-                except json.JSONDecodeError:
-                    tool_args = {}
-                yield {
-                    "type": "tool_call",
-                    "id": tc["id"],
-                    "name": tool_name,
-                    "arguments": tool_args,
+        Args:
+            messages: List of chat messages
+            model: Model to use (overrides default)
+            tools: Optional function calling tools schema
+
+        Yields:
+            Tuple of (chunk_type, content):
+            - ('content', str) for regular content
+            - ('reasoning', str) for reasoning content (R1 models)
+            - ('tool_call', dict) for tool call information
+        """
+        model = model or self._model
+        attempt = 0
+
+        while attempt < API_RETRIES:
+            try:
+                params: dict[str, Any] = {
+                    "model": model,
+                    "messages": messages,
+                    "stream": True,
+                    "temperature": 0.7,
                 }
 
-                # Execute tool
-                handler = self._tool_handlers.get(tool_name)
-                if handler:
-                    try:
-                        result = handler(**tool_args)
-                        yield {"type": "tool_result", "id": tc["id"],
-                               "name": tool_name, "content": str(result)}
-                    except Exception as e:
-                        yield {"type": "tool_result", "id": tc["id"],
-                               "name": tool_name, "content": f"Error: {e}"}
-                else:
-                    yield {"type": "tool_result", "id": tc["id"],
-                           "name": tool_name, "content": f"Unknown tool: {tool_name}"}
+                if tools:
+                    params["tools"] = tools
+                    params["tool_choice"] = "auto"
 
-    async def simple_chat(self, messages: list[dict]) -> str:
-        """Non-streaming chat for tool call follow-ups."""
-        try:
-            resp = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                stream=False,
-            )
-            return resp.choices[0].message.content or ""
-        except Exception as e:
-            return f"Error: {e}"
+                stream = await self._client.chat.completions.create(**params)
+
+                async for chunk in stream:
+                    choices = chunk.choices
+                    if not choices:
+                        continue
+
+                    delta = choices[0].delta
+                    content = delta.content or ""
+                    reasoning_content = getattr(delta, "reasoning_content", "") or ""
+
+                    # Handle reasoning content first (for R1 models)
+                    if reasoning_content:
+                        yield ("reasoning", reasoning_content)
+
+                    if content:
+                        yield ("content", content)
+
+                    # Handle tool calls
+                    if delta.tool_calls:
+                        for tool_call in delta.tool_calls:
+                            if tool_call.id and hasattr(tool_call.function, "name"):
+                                args = getattr(tool_call.function, "arguments", None)
+                                yield (
+                                    "tool_call",
+                                    {
+                                        "id": tool_call.id,
+                                        "name": tool_call.function.name,
+                                        "arguments": args,
+                                    },
+                                )
+
+                    self._tokens_used += chunk.usage.prompt_tokens
+                    self._last_response_time = chunk.created
+
+                break
+
+            except RateLimitError as e:
+                attempt += 1
+                wait_time = min(2**attempt * 2, 30)  # Exponential backoff
+                print(f"Rate limited. Retrying in {wait_time}s... ({attempt}/{API_RETRIES})")
+                await asyncio.sleep(wait_time)
+            except Exception as e:
+                print(f"API error: {e}")
+                raise
+
+    async def chat_complete(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None = None,
+        tools: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        """Get a complete chat response (non-streaming).
+
+        Args:
+            messages: List of chat messages
+            model: Model to use (overrides default)
+            tools: Optional function calling tools schema
+
+        Returns:
+            Complete completion response dictionary
+        """
+        response = await self._chat_complete(messages, model, tools)
+        return {
+            "content": response.choices[0].message.content,
+            "role": response.choices[0].message.role,
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                }
+                for tc in (response.choices[0].message.tool_calls or [])
+            ],
+        }
+
+    async def _chat_complete(
+        self,
+        messages: list[dict[str, Any]],
+        model: str | None = None,
+        tools: list[dict] | None = None,
+    ) -> Any:
+        """Internal method for non-streaming completion."""
+        model = model or self._model
+
+        params: dict[str, Any] = {"model": model, "messages": messages}
+        if tools:
+            params["tools"] = tools
+            params["tool_choice"] = "auto"
+
+        response = await self._client.chat.completions.create(**params)
+
+        self._tokens_used += response.usage.total_tokens
+
+        return response
+
+    async def get_usage_stats(self) -> dict[str, int]:
+        """Get current usage statistics."""
+        return {
+            "tokens_used": self._tokens_used,
+            "max_tokens": Config.MAX_CONTEXT_TOKENS,
+            "remaining": Config.MAX_CONTEXT_TOKENS - self._tokens_used,
+        }

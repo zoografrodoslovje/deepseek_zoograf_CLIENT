@@ -1,151 +1,127 @@
-"""
-HERO UI POR — Light Theme
-Clean, bright terminal UI with hero-style bold accents.
-"""
-from textual.theme import Theme
+"""UI Theme - Colors, Styles, and CSS Definitions"""
 
-HERO_UI_POR_LIGHT = Theme(
-    name="hero-ui-por-light",
-    primary="#2563EB",
-    secondary="#7C3AED",
-    accent="#F59E0B",
-    warning="#F59E0B",
-    error="#EF4444",
-    success="#10B981",
-    foreground="#1E293B",
-    background="#FAFAF8",
-    surface="#FFFFFF",
-    panel="#FFFFFF",
-    boost="#E2F0FF",
-    dark=False,
-    variables={
-        "block-cursor-text-style": "none",
-        "block-cursor-foreground": "#FFFFFF",
-        "block-cursor-background": "#2563EB",
-        "footer-background": "#F1F5F9",
-        "footer-foreground": "#64748B",
-        "header-background": "#2563EB",
-        "header-foreground": "#FFFFFF",
+
+THEME = {
+    "colors": {
+        # Primary colors
+        "brand_primary": "#00d4ff",
+        "brand_secondary": "#7aa2f7",
+        "accent_success": "#9ece6a",
+        "accent_warning": "#e0af68",
+        "accent_error": "#f7768e",
+        "accent_info": "#7dcfff",
+        # Text colors
+        "text_primary": "#c0caf5",
+        "text_secondary": "#a9b1d6",
+        "text_muted": "#565f89",
+        "text_accent_user": "#7aa2f7",  # Blue for user messages
+        "text_accent_bot": "#9ece6a",   # Green for bot messages
+        "text_error": "#f7768e",
+        # Background colors
+        "bg_dark": "#1a1b26",
+        "bg_darker": "#16161e",
+        "bg_light": "#24283b",
+        "bg_message_user": "#1f2335",
+        "bg_message_bot": "#1f2335",
+        # Border colors
+        "border_default": "#414868",
+        "border_focus": "#7aa2f7",
     },
-)
-
-# CSS for the entire app
-APP_CSS = """
-Screen {
-    background: #FAFAF8;
+    "styles": {
+        "chat_container": {
+            "height": "1fr",
+            "padding": "1",
+            "background_color": "$bg_dark",
+        },
+        "message": {
+            "margin_bottom": "1",
+            "padding": "1",
+            "border": "solid $border_default",
+            "border_radius": "1",
+        },
+        "input_row": {
+            "height": "3",
+            "width": "1fr",
+        },
+        "user_input": {
+            "width": "1fr",
+            "padding": "1",
+            "background_color": "$bg_light",
+            "color": "$text_primary",
+        },
+        "status_bar": {
+            "height": "1",
+            "background_color": "$bg_darker",
+            "color": "$text_secondary",
+        },
+    },
+    "animations": {
+        "blink_speed": "1s",
+        "fade_duration": "0.2s",
+    },
 }
 
-ChatView {
-    background: #FFFFFF;
-    border: none;
-    padding: 0 1;
-}
+# Textual CSS themes
+CSS_DARK = """
+Default:
+    background: $background;
+    color: $foreground;
 
-ChatView:focus-within {
-    border: none;
-}
-
-RichLog {
-    background: #FFFFFF;
-    padding: 0 1;
-}
-
-InputArea {
-    background: #FFFFFF;
-    border-top: solid #E2E8F0;
-    height: 8;
-    padding: 1 1;
-}
-
-InputArea TextArea {
-    background: #FFFFFF;
-    border: tall #CBD5E1;
-    padding: 1 2;
-    color: #1E293B;
-}
-
-InputArea TextArea:focus {
-    border: tall #2563EB;
-}
-
-StatusBar {
-    background: #F1F5F9;
-    color: #64748B;
-    border-top: solid #E2E8F0;
+#header:
     height: 1;
-    padding: 0 2;
-}
+    background: $primary 30%;
+    content-align: center middle;
 
-#chat-container {
-    background: #FFFFFF;
-    border: none;
-}
-
-#input-container {
-    background: #FFFFFF;
-    border-top: solid #E2E8F0;
-    height: auto;
-    min-height: 6;
+#chat-container:
+    width: 1fr;
+    height: 1fr;
     padding: 1;
-}
+    background: $bg_dark;
 
-.message-row {
-    margin: 1 0;
-    padding: 1 2;
-}
+.message-user:
+    background: $bg_message_user;
+    border-left: solid $text_accent_user;
+    margin-bottom: 1;
+    padding: 1;
 
-.message-user {
-    background: #EFF6FF;
-    color: #1E293B;
-    border-left: solid #2563EB;
-    padding: 1 2;
-    margin: 1 0;
-}
+.message-bot:
+    background: $bg_message_bot;
+    border-left: solid $text_accent_bot;
+    margin-bottom: 1;
+    padding: 1;
 
-.message-assistant {
-    background: #FFFFFF;
-    color: #1E293B;
-    padding: 1 2;
-    margin: 1 0;
-}
-
-.message-tool {
-    color: #64748B;
-    padding: 0 2;
-    margin: 0 0;
-}
-
-.tool-bar {
-    background: #F8FAFC;
-    color: #475569;
+#input-area:
     height: 3;
-    padding: 0 1;
-}
+    width: 1fr;
+    background: $bg_light;
+    padding: 1;
 
-.tool-button {
-    background: #2563EB;
-    color: #FFFFFF;
-    padding: 0 2;
+#input-field:
+    width: 1fr;
+    color: $text_primary;
+
+#status-bar:
     height: 1;
-}
+    background: $bg_darker;
+    color: $text_secondary;
 
-.tool-button:hover {
-    background: #1D4ED8;
-}
+/* Code blocks */
+code-block:
+    background: $bg_darker;
+    padding: 1;
+    border-radius: $border-default;
 
-.status-model {
-    color: #2563EB;
-}
+/* Scrollbar styling */
+Scrollbars:
+    background: $bg_light;
+    opacity: 0.3;
 
-.status-tokens {
-    color: #64748B;
-}
+/* Focus states */
+Input:focus:
+    border-style: solid $brand_primary;
 
-.status-api {
-    color: #10B981;
-}
-
-.status-api.disconnected {
-    color: #EF4444;
-}
+Button:focus:
+    background: $brand_primary;
 """
+
+__all__ = ["THEME", "CSS_DARK"]

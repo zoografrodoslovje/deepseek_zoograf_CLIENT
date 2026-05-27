@@ -9,8 +9,6 @@
 [![DeepSeek](https://img.shields.io/badge/API-DeepSeek-4A6CF7)](https://platform.deepseek.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-![Hero UI Demo](./docs/demo.gif)
-
 </div>
 
 ---
@@ -18,71 +16,51 @@
 ## ✨ Features
 
 - 💬 **Chat with DeepSeek** — Stream responses with live markdown rendering
-- 🛠️ **Agentic Tools** — Read/write files, run shell commands, search codebases — all through the AI
-- 📋 **Session Management** — Save and reload conversations (`Ctrl+S`, `Ctrl+N`)
-- 🔄 **Model Switching** — Toggle between `deepseek-chat` and `deepseek-reasoner` (`Ctrl+M`)
-- 🎨 **HERO UI POR Light Theme** — Clean, bright terminal UI with hero-style accents
+- 🛠️ **Agentic Tools** — Read/write files, run shell commands, search codebases
+- 📋 **Session Management** — Save and reload conversations
+- 🔄 **Model Switching** — Toggle between `deepseek-chat` and `deepseek-reasoner`
+- 🎨 **HERO UI POR Light Theme** — Clean, bright terminal UI
 - 📊 **Token Tracking** — Real-time token usage in the status bar
-- 🪟 **Windows-native** — One-click installer, PowerShell/BAT setup, virtual env management
+- 🪟 **Windows-native** — One-click installers, virtual environment management
 
 ---
 
-## 📦 Quick Install (Windows)
+## 🚀 One-Shot Install (Windows)
 
-### Prerequisites
-- **Python 3.10+** — [Download here](https://www.python.org/downloads/) (check *"Add Python to PATH"*)
-- **Windows Terminal** (recommended) — Get it from the [Microsoft Store](https://apps.microsoft.com/detail/9n0dx20hk701)
-- A **DeepSeek API key** — Get one free at [platform.deepseek.com](https://platform.deepseek.com/api_keys)
+**Requirements:** Windows 10+, Python 3.10+ ([download](https://www.python.org/downloads/))
 
-### Option 1: One-Click Setup (Recommended)
+### PowerShell (Recommended)
+```powershell
+iex (iwr -Uri https://raw.githubusercontent.com/zoografrodoslovje/deepseek_zoograf_CLIENT/main/install-online.ps1)
+```
 
+This single command:
+1. ✅ Checks your Python installation
+2. ✅ Downloads the latest client (git or ZIP)
+3. ✅ Creates an isolated virtual environment
+4. ✅ Installs all dependencies
+5. ✅ Opens `.env` so you can paste your API key
+
+When prompted, **paste your DeepSeek API key** into `.env` (get one free at [platform.deepseek.com](https://platform.deepseek.com/api_keys)).
+
+### CMD (Command Prompt)
 ```batch
-:: 1. Download or clone the repository
+@powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/zoografrodoslovje/deepseek_zoograf_CLIENT/main/install-online.ps1'))"
+```
+
+### Alternative: Clone + Install
+```batch
 git clone https://github.com/zoografrodoslovje/deepseek_zoograf_CLIENT.git
 cd deepseek_zoograf_CLIENT
-
-:: 2. Run the installer — it does everything
 install.bat
 ```
 
-The installer will:
-1. ✅ Check your Python installation
-2. ✅ Create an isolated virtual environment (`venv\`)
-3. ✅ Install all dependencies (textual, openai, rich, etc.)
-4. ✅ Open `.env` so you can paste your API key
-5. ✅ Verify everything works
-
-Then launch with:
+### Launch After Install
 ```batch
-run.bat
+cd deepseek_zoograf_CLIENT
+.\run.bat
 ```
-
-### Option 2: PowerShell Setup
-```powershell
-.\install.ps1
-# If you get a security error, run:
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.\install.ps1
-```
-
-### Option 3: Manual Setup
-```batch
-:: Create virtual environment
-python -m venv venv
-
-:: Activate it
-venv\Scripts\activate
-
-:: Install dependencies
-pip install -r requirements.txt
-
-:: Configure API key
-copy .env.example .env
-:: → Edit .env and set DEEPSEEK_API_KEY
-
-:: Run
-python main.py
-```
+*Note: In PowerShell, always use `.\run.bat` (not just `run.bat`).*
 
 ---
 
@@ -101,33 +79,30 @@ python main.py
 | `F5` | Toggle tool calling on/off |
 
 **Getting started:**
-1. Launch the client with `run.bat`
-2. Type your question or task in the input area
+1. Launch with `.\run.bat`
+2. Type your question or task
 3. Press `Enter` to send
-4. Watch the AI respond with streaming markdown
-5. The AI can use tools — file operations, shell commands, codebase search
+4. The AI responds with streaming markdown
 
 **Example prompts:**
-- *"Read the main.py file and explain what it does"*
-- *"Search for all TODO comments in this project"*
-- *"Create a new Python script named hello.py that prints 'Hello from DeepSeek!'"*
+- *"Read main.py and explain it"*
+- *"Find all TODO comments in this project"*
+- *"Create a file called hello.py"*
 - *"List all files in the src directory"*
 
 ---
 
-## 🧰 Built-in Tools
+## 🧰 Agentic Tools
 
-The AI assistant can autonomously use these tools when helpful:
+The AI assistant uses these tools automatically when helpful:
 
 | Tool | Description |
 |------|-------------|
 | `read_file` | Read any file in the project |
-| `write_file` | Create or overwrite files (creates directories) |
+| `write_file` | Create or overwrite files |
 | `list_directory` | Browse files and folders |
-| `execute_command` | Run shell commands (execution is shown transparently) |
-| `search_codebase` | Search file contents with regex (ripgrep/grep) |
-
-All shell commands are shown to you before execution — nothing runs silently.
+| `execute_command` | Run shell commands (shown before execution) |
+| `search_codebase` | Search file contents with regex |
 
 ---
 
@@ -135,20 +110,22 @@ All shell commands are shown to you before execution — nothing runs silently.
 
 ```
 deepseek_zoograf_CLIENT/
-├── main.py                    # Entry point — double-click or "python main.py"
-├── install.bat                # One-click Windows installer
-├── install.ps1                # PowerShell installer
-├── run.bat                    # Quick launch after setup
-├── requirements.txt           # Python dependencies
+├── main.py                    # Entry point
+├── install.bat                # Windows installer (CMD)
+├── install.ps1                # Windows installer (PowerShell)
+├── install-online.ps1         # One-shot online installer
+├── run.bat                    # Quick launcher
+├── requirements.txt           # Dependencies
 ├── .env.example               # API key template
 ├── .gitignore
 ├── README.md                  # ← This file
 ├── pyproject.toml             # Project metadata
+├── LICENSE                    # MIT License
 │
 ├── src/                       # Source code
-│   ├── ui/                    # User interface layer
-│   │   ├── app.py             # Main Textual App (DeepSeekTUI)
-│   │   ├── chat_view.py       # Streaming markdown chat display
+│   ├── ui/                    # User interface (Textual)
+│   │   ├── app.py             # Main App (DeepSeekTUI)
+│   │   ├── chat_view.py       # Streaming chat display
 │   │   ├── input_area.py      # Multi-line input with history
 │   │   ├── status_bar.py      # Model / token / connection status
 │   │   └── theme.py           # HERO UI POR Light theme + CSS
@@ -156,12 +133,12 @@ deepseek_zoograf_CLIENT/
 │   │   ├── client.py          # AsyncOpenAI DeepSeek client
 │   │   ├── config.py          # .env configuration loader
 │   │   ├── context.py         # Token tracking & context window
-│   │   └── session.py         # Session save/load persistence
-│   ├── tools/                 # Agentic tool implementations
+│   │   └── session.py         # Session save/load
+│   ├── tools/                 # Agentic tools
 │   │   ├── registry.py        # Tool definitions + handler mapping
 │   │   ├── filesystem.py      # read_file, write_file, list_directory
 │   │   ├── shell.py           # execute_command (with confirmation)
-│   │   └── search.py          # search_codebase (ripgrep/grep)
+│   │   └── search.py          # search_codebase
 │   └── utils/                 # Utilities
 │       ├── markdown.py        # Rich markdown rendering
 │       └── logger.py          # Logging setup
@@ -169,60 +146,50 @@ deepseek_zoograf_CLIENT/
 └── docs/                      # Documentation
     ├── USAGE.md               # Full usage guide
     ├── TROUBLESHOOTING.md     # Common issues & solutions
-    └── ARCHITECTURE.md        # Technical architecture overview
+    └── ARCHITECTURE.md        # Technical architecture
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-All settings live in `.env`:
+Edit `.env` in the project root:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DEEPSEEK_API_KEY` | — | **Required.** Your DeepSeek API key |
-| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | API endpoint URL |
-| `DEFAULT_MODEL` | `deepseek-chat` | Default model (`deepseek-chat` or `deepseek-reasoner`) |
+| `DEEPSEEK_BASE_URL` | `https://api.deepseek.com/v1` | API endpoint |
+| `DEFAULT_MODEL` | `deepseek-chat` | Default model |
 | `MAX_TOKENS` | `64000` | Context window size |
-| `MAX_OUTPUT_TOKENS` | `4096` | Max tokens per response |
+| `MAX_OUTPUT_TOKENS` | `4096` | Max response tokens |
 | `TEMPERATURE` | `0.7` | Response creativity (0.0–2.0) |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 
 ---
 
-## 🚢 Sessions
+## 📚 Documentation
 
-Sessions are automatically saved to `~/.ds-cli/sessions/` as JSON files.
-
-- **`Ctrl+S`** — Save the current conversation
-- **`Ctrl+N`** — Start a fresh session
-- Sessions include full message history and metadata (model, timestamp)
-
----
-
-## 🧪 Development
-
-```bash
-# Install in dev mode
-pip install -e .
-
-# Run with Textual dev tools for debugging
-textual run --dev main.py
-
-# Run with live CSS reloading
-textual run --dev main.py --css src/ui/theme.py
-```
+| Document | Description |
+|----------|-------------|
+| [`docs/USAGE.md`](docs/USAGE.md) | Complete usage guide with interface diagram and keyboard reference |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Solutions for all common errors (Python PATH, API keys, Unicode display, anyio corruption, etc.) |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Technical overview for contributors |
 
 ---
 
-## ❓ Troubleshooting
+## ❓ Common Issues
 
-See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for solutions to common issues:
+| Problem | Fix |
+|---------|-----|
+| `'python' not recognized` | Reinstall Python, check **Add Python to PATH** |
+| `No module named 'anyio.to_thread'` | `pip install --force-reinstall anyio` |
+| PowerShell says `&&` is invalid | Use PowerShell 7+ or run `install.bat` instead |
+| `run.bat` not found | Use `.\run.bat` in PowerShell |
+| Unicode boxes show garbage | Use **Windows Terminal** with Cascadia Code font |
+| `401 Unauthorized` | Check your API key in `.env` |
+| `429 Too Many Requests` | Wait a minute and retry |
 
-- *"No module named 'anyio.to_thread'"*
-- *"Python not found"* or *"pip is not recognized"*
-- *Terminal display issues / unicode boxes*
-- *API key / connection errors*
+See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for detailed solutions.
 
 ---
 

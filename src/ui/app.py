@@ -1,364 +1,241 @@
-"""Main Textual App — HERO UI POR DeepSeek CLI Tool."""
-from textual.app import App, ComposeResult
-from textual.binding import Binding
-from textual.reactive import reactive
-from textual.widgets import Header, Footer, Static
-from textual.containers import Container, Horizontal, Vertical
-from textual.screen import Screen
-from rich.text import Text
-from rich.markdown import Markdown
-from rich.panel import Panel
+"""Main Application - Orchestrates UI, Core Logic, and Tools"""
+
 import asyncio
-import json
-import sys
-import os
+from textual.app import App, ComposeResult
+from textual.widgets import Header, Footer
+from textual.binding import Binding
+from pathlib import Path
 
-# Add parent to path
-sys.path.insert(0, str(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
-
-from src.ui.chat_view import ChatView
-from src.ui.input_area import InputArea
-from src.ui.status_bar import StatusBar
-from src.ui.theme import HERO_UI_POR_LIGHT, APP_CSS
-from src.core.config import Config
-from src.core.client import DeepSeekClient
-from src.core.context import ContextManager
-from src.core.session import SessionManager
-from src.tools.registry import get_tool_definitions, get_tool_handlers
-from src.tools.shell import CommandRequiresConfirmation, execute_command_approved
-from src.utils.logger import setup_logger
+from core.client import DeepSeekClient
+from core.context import ContextManager
+from core.session import SessionManager
+from core.config import Config
+from tools.registry import get_all_tools, execute_tool
+from .chat_view import ChatWidget
+from .input_area import InputArea
+from .status_bar import StatusBar
 
 
-class HeroConfirmDialog(Static):
-    """Simple confirmation dialog for shell commands."""
-    def __init__(self, command: str, description: str):
-        super().__init__()
-        self.command = command
-        self.description = description
-        self.confirmed = False
+class DeepSeekApp(App):
+    """Main Textual application for DeepSeek CLI Tool."""
 
-    def on_mount(self):
-        self.styles.background = "#FFFFFF"
-        self.styles.border = ("solid", "#2563EB")
-        self.styles.margin = (1, 2)
-        self.styles.padding = (1, 2)
-        self.update(
-            Panel(
-                f"[bold #1E293B]Execute Command?[/]\\n\\n"
-                f"[#64748B]{self.description}[/]\\n"
-                f"[#1E293B]$ [bold]{self.command}[/]\\n\\n"
-                f"[#94A3B8]Press [bold #2563EB]Y[/] to confirm, [bold #EF4444]N[/] to cancel[/]",
-                border_style="#2563EB",
-            )
-        )
+    CSS_PATH = "theme.css"
 
-
-class DeepSeekTUI(App):
-    """HERO UI POR — DeepSeek Agentic Terminal Client."""
-
-    CSS = APP_CSS
-    TITLE = "HERO UI POR"
-    SUB_TITLE = "DeepSeek Agentic Terminal Client"
     BINDINGS = [
-        Binding("ctrl+c", "quit", "Quit", priority=True),
-        Binding("ctrl+l", "clear", "Clear chat"),
-        Binding("ctrl+s", "save_session", "Save session"),
-        Binding("ctrl+n", "new_session", "New session"),
-        Binding("ctrl+m", "toggle_model", "Switch model"),
-        Binding("f5", "toggle_tools", "Toggle tools"),
+        Binding("q", "quit", "Quit"),
+        Binding("ctrl+c", "interrupt", "Interrupt"),
+        Binding("d", "clear_session", "Clear Chat"),
+        Binding("s", "save_session", "Save Session"),
+        Binding("o", "load_session", "Load Session"),
+        Binding("?", "help", "Help"),
     ]
 
     def __init__(self):
         super().__init__()
-        self.config = Config()
-        self.client = DeepSeekClient(self.config)
-        self.context = ContextManager(max_tokens=self.config.max_tokens)
-        self.session = SessionManager()
-        self.logger = setup_logger(level=self.config.log_level)
-
-        # Tools
-        tool_defs = get_tool_definitions()
-        tool_handlers = get_tool_handlers()
-        self.client.register_tools(tool_defs, tool_handlers)
-
-        # UI widgets
-        self.chat_view = ChatView()
-        self.input_area = InputArea()
-        self.status_bar = StatusBar()
-
-        self._streaming = False
-        self._pending_confirmation = None
-        self._tools_enabled = True
-        self._session_new = False
+        self._client: DeepSeekClient | None = None
+        self._context_manager: ContextManager | None = None
+        self._session_manager: SessionManager | None = None
+        self._is_streaming: bool = False
+        self._update_func = None
 
     def compose(self) -> ComposeResult:
+        """Compose the application layout."""
         yield Header(show_clock=True)
-        with Container(id="chat-container"):
-            yield self.chat_view
-        with Container(id="input-container"):
-            yield self.input_area
-        yield self.status_bar
+        yield ChatWidget(id="chat-widget")
+        yield StatusBar(id="status-bar")
+        yield InputArea(id="input-area")
+        yield Footer()
 
-    def on_mount(self):
-        self.register_theme(HERO_UI_POR_LIGHT)
-        self.theme = "hero-ui-por-light"
+    async def on_mount(self):
+        """Initialize components when app mounts."""
+        # Initialize components
+        self._client = DeepSeekClient()
+        self._context_manager = ContextManager(self._client)
+        self._session_manager = SessionManager()
 
-        self.status_bar.set_model(self.config.default_model)
-        self.status_bar.set_connected(self.config.is_configured())
+        # Set up system prompt
+        await self._context_manager.add_system_message(
+            "You are a helpful coding assistant integrated into an agentic terminal environment. "
+            "You have access to file reading, writing, directory listing, shell command execution, "
+            "and codebase search tools. Respond helpfully and concisely."
+        )
 
-        if not self.config.is_configured():
-            self.chat_view.add_message(
-                "assistant",
-                "⚠️ **DeepSeek API key not configured.**\\n\\n"
-                "Create a `.env` file with:\\n"
-                "```\\n"
-                "DEEPSEEK_API_KEY=sk-your-key-here\\n"
-                "```\\n"
-                "Or set the `DEEPSEEK_API_KEY` environment variable.",
-            )
-        else:
-            self.chat_view.add_message(
-                "assistant",
-                "## 🚀 Welcome to **HERO UI POR**\\n\\n"
-                "DeepSeek Agentic Terminal Client\\n\\n"
-                "I can help you with:\\n"
-                "- 💻 **Code** — Write, debug, refactor\\n"
-                "- 📁 **Files** — Read, write, browse your project\\n"
-                "- 🔍 **Search** — grep through your codebase\\n"
-                "- 🛠️ **Shell** — Run commands (with your approval)\\n\\n"
-                "Type your message below and press **Enter** to start!",
-            )
+        # Update status bar
+        self.query_one("#status-bar", StatusBar).update_connection(True)
+        self.query_one("#status-bar", StatusBar).update_model(
+            self._client.current_model
+        )
 
-        if self._session_new:
-            self.session.new_session("DeepSeek CLI Session")
-            self._session_new = False
+        # Add welcome message
+        chat_widget = self.query_one("#chat-widget", ChatWidget)
+        await chat_widget.add_message(
+            "assistant",
+            "Welcome to DeepSeek CLI! Type your message or use `?` for help.\n\n"
+            "**Available Commands:**\n"
+            "- `Ctrl+C`: Interrupt current operation\n"
+            "- `D`: Clear conversation\n"
+            "- `S`: Save session\n"
+            "- `O`: Load session\n"
+            "- `Q`: Quit application",
+        )
 
-    async def on_input_area_submitted(self, event: InputArea.Submitted):
-        """Handle user input submission."""
-        if self._streaming:
+    async def action_quit(self):
+        """Handle quit action."""
+        await self.exit()
+
+    async def action_interrupt(self):
+        """Handle interrupt (for breaking long operations)."""
+        if self._is_streaming:
+            # Cancel any pending tasks
+            self._is_streaming = False
+            print("\n[Interrupted]")
+
+    async def action_clear_session(self):
+        """Clear conversation history."""
+        chat_widget = self.query_one("#chat-widget", ChatWidget)
+        await chat_widget.clear()
+        if self._context_manager:
+            await self._context_manager.clear()
+
+        # Add confirmation
+        await chat_widget.add_message("assistant", "Conversation cleared.")
+
+    async def action_save_session(self):
+        """Save current session."""
+        if not self._context_manager or not self._session_manager:
             return
 
-        text = event.text
-        self.chat_view.add_message("user", text)
-        self.input_area.text = ""
+        messages = self._context_manager.messages
+        session_id = await self._session_manager.create_session()
+        await self._session_manager.save_session(session_id, messages)
 
-        messages = self.chat_view.get_api_messages()
-        if self.context.needs_truncation(messages):
-            messages = self.context.truncate_messages(messages)
+        chat_widget = self.query_one("#chat-widget", ChatWidget)
+        await chat_widget.add_message(
+            "assistant", f"Session saved with ID: {session_id}"
+        )
 
-        # System prompt
-        system_prompt = {
-            "role": "system",
-            "content": (
-                "You are HERO UI POR, an advanced agentic coding assistant powered by DeepSeek. "
-                "You have access to tools for reading/writing files, listing directories, "
-                "executing shell commands (with user approval), and searching codebases. "
-                "ALWAYS use these tools when they would help the user. "
-                "Be concise, accurate, and helpful. "
-                "When showing code changes, explain what you changed and why."
-            ),
-        }
-        api_messages = [system_prompt] + messages
+    async def action_load_session(self):
+        """Load previous session."""
+        if not self._session_manager:
+            return
 
-        self._streaming = True
-        self.status_bar.set_connected(True)
+        sessions = await self._session_manager.list_sessions()
+
+        if not sessions:
+            chat_widget = self.query_one("#chat-widget", ChatWidget)
+            await chat_widget.add_message(
+                "assistant", "No saved sessions found."
+            )
+            return
+
+        # Show available sessions (in practice, would use a picker)
+        session_list = "\n".join(f"- {s['id']}: {s['name']} ({s['message_count']} msgs)" for s in sessions[:5])
+        chat_widget = self.query_one("#chat-widget", ChatWidget)
+        await chat_widget.add_message(
+            "assistant",
+            f"Available sessions:\n{session_list}\n\nUse the ID to load (manual selection for now)."
+        )
+
+    async def on_input_submitted(self, event: InputArea.Submit) -> None:
+        """Handle input submission."""
+        await self._handle_message(event)
+
+    async def _handle_message(self, event=None) -> None:
+        """Process user message and generate response."""
+        if self._is_streaming:
+            return
+
+        input_area = self.query_one("#input-area", InputArea)
+        chat_widget = self.query_one("#chat-widget", ChatWidget)
+        status_bar = self.query_one("#status-bar", StatusBar)
+
+        # Get message text
+        text = input_area.get_text_and_reset()
+        if not text:
+            return
+
+        # Add user message to display
+        await chat_widget.add_message("user", text)
+
+        # Add to context
+        await self._context_manager.add_message("user", text)
+
+        # Prepare messages for API
+        messages = await self._context_manager.get_messages_for_api()
+
+        # Enable streaming mode
+        self._is_streaming = True
+        input_area.disabled = True
+        status_bar.update_connection(False)
 
         try:
-            await self._process_stream(api_messages)
-        except Exception as e:
-            self.logger.error(f"Stream error: {e}")
-            self.chat_view.add_message("assistant", f"❌ Error: {str(e)}")
-        finally:
-            self._streaming = False
+            # Check if AI wants to use tools
+            tools = get_all_tools()
 
-    async def _process_stream(self, messages: list[dict]):
-        """Process the streaming response with tool call handling."""
-        # Initial streaming pass
-        self.chat_view.start_streaming()
-        tool_calls = []
-        final_content = ""
-        usage_info = {}
+            stream_generator = self._client.chat_stream(messages, tools=tools)
 
-        # First pass: get the response (could have tool calls)
-        async for event in self.client.stream_chat(messages):
-            if event["type"] == "content":
-                self.chat_view.update_streaming(event["content"])
-                final_content += event["content"]
+            # Start receiving tokens
+            full_response = ""
 
-            elif event["type"] == "reasoning":
-                self.chat_view.update_streaming(f"*[thinking]* {event['content']}")
+            async for chunk_type, chunk_data in stream_generator:
+                if not self._is_streaming:
+                    break
 
-            elif event["type"] == "tool_call":
-                tool_calls.append(event)
+                if chunk_type == "tool_call":
+                    # Handle tool call
+                    tool_name = chunk_data["name"]
+                    args_str = chunk_data["arguments"] or "{}"
 
-            elif event["type"] == "usage":
-                usage_info = event
-                self.context.add_usage(
-                    event.get("prompt_tokens", 0),
-                    event.get("completion_tokens", 0),
-                )
-                self.status_bar.set_tokens(
-                    self.context.total_tokens,
-                    self.context.max_tokens,
-                )
+                    try:
+                        import json
 
-            elif event["type"] == "error":
-                self.chat_view.finish_streaming()
-                self.chat_view.add_message("assistant", f"❌ API Error: {event['content']}")
-                return
+                        args = json.loads(args_str)
+                    except Exception:
+                        args = {}
 
-        self.chat_view.finish_streaming()
+                    # Execute tool
+                    result = execute_tool(tool_name, args)
 
-        # If we have tool calls, process them
-        if tool_calls:
-            tool_results = []
-            for tc in tool_calls:
-                tool_name = tc["name"]
-                tool_args = tc["arguments"]
-                tool_id = tc["id"]
-
-                # For shell commands, show confirmation dialog
-                if tool_name == "execute_command":
-                    cmd = tool_args.get("command", "")
-                    desc = tool_args.get("description", "")
-                    panel = Panel(
-                        f"[bold #1E293B]🛠️ Execute Command?[/]\\n\\n"
-                        f"[#64748B]{desc}[/]\\n"
-                        f"[#1E293B]$ [bold]{cmd}[/]\\n\\n"
-                        f"[#94A3B8]Auto-approved — command shown for transparency[/]",
-                        border_style="#F59E0B",
+                    # Add tool result to messages
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": chunk_data["id"],
+                            "content": result,
+                        }
                     )
-                    self.chat_view.add_message("assistant", f"**🛠️ Tool: execute_command**")
-                    self.chat_view.add_message("tool", str(panel))
 
-                    # Auto-execute for now (user can quit if worried)
-                    result = await execute_command_approved(cmd)
-                    tool_results.append({
-                        "role": "tool",
-                        "tool_call_id": tool_id,
-                        "content": result,
-                    })
-                    self.chat_view.add_message("tool", f"$ {cmd}\\n\\n{result[:1000]}")
-                else:
-                    # Other tools run directly
-                    handler = get_tool_handlers().get(tool_name)
-                    if handler:
-                        self.chat_view.add_message("assistant", f"**🛠️ Tool: {tool_name}**")
-                        try:
-                            if tool_name == "execute_command":
-                                result = await execute_command_approved(tool_args["command"])
-                            else:
-                                result = handler(**tool_args)
-                            self.chat_view.add_message("tool", str(result)[:1000])
-                            tool_results.append({
-                                "role": "tool",
-                                "tool_call_id": tool_id,
-                                "content": str(result),
-                            })
-                        except CommandRequiresConfirmation as crc:
-                            self.chat_view.add_message(
-                                "tool",
-                                f"⚠️ Command requires confirmation: {crc.command}"
-                            )
-                            tool_results.append({
-                                "role": "tool",
-                                "tool_call_id": tool_id,
-                                "content": "Command cancelled — user needs to confirm",
-                            })
-                        except Exception as e:
-                            self.chat_view.add_message("tool", f"❌ Error: {e}")
-                            tool_results.append({
-                                "role": "tool",
-                                "tool_call_id": tool_id,
-                                "content": f"Error: {e}",
-                            })
+                    # Continue streaming
+                    continue
 
-            # Send tool results back to API for final response
-            if tool_results:
-                new_messages = messages + [
-                    {"role": "assistant", "content": final_content or None,
-                     "tool_calls": [
-                         {"id": tc["id"], "type": "function",
-                          "function": {"name": tc["name"], "arguments": json.dumps(tc["arguments"])}}
-                         for tc in tool_calls
-                     ]} if final_content or tool_calls else {"role": "assistant", "content": final_content}
-                ] + tool_results
+                elif chunk_type == "reasoning":
+                    # Display reasoning content (R1 models)
+                    pass  # Can render in gray in future
 
-                # If first assistant message has no content, clean it up
-                if not final_content and tool_calls:
-                    new_messages = [
-                        m for m in new_messages
-                        if not (m["role"] == "assistant" and not m.get("content") and not m.get("tool_calls"))
-                    ]
+                elif chunk_type == "content":
+                    full_response += chunk_data
+                    chat_widget.stream_content(full_response)
 
-                self.chat_view.start_streaming()
-                async for event in self.client.stream_chat(new_messages):
-                    if event["type"] == "content":
-                        self.chat_view.update_streaming(event["content"])
-                    elif event["type"] == "usage":
-                        self.context.add_usage(
-                            event.get("prompt_tokens", 0),
-                            event.get("completion_tokens", 0),
-                        )
-                        self.status_bar.set_tokens(
-                            self.context.total_tokens,
-                            self.context.max_tokens,
-                        )
-                    elif event["type"] == "error":
-                        self.chat_view.finish_streaming()
-                        self.chat_view.add_message("assistant", f"❌ API Error: {event['content']}")
-                        return
-                self.chat_view.finish_streaming()
+            # Add assistant response to context
+            await self._context_manager.add_message("assistant", full_response)
 
-    def action_clear(self):
-        """Clear the chat history."""
-        self.chat_view.clear_all()
-        self.context.reset()
-        self.status_bar.set_tokens(0, self.context.max_tokens)
-        self.chat_view.add_message("assistant", "🧹 Chat cleared. Starting fresh!")
+        except Exception as e:
+            await chat_widget.add_message(
+                "assistant", f"**Error**: {str(e)}"
+            )
 
-    def action_save_session(self):
-        """Save the current session."""
-        messages = self.chat_view.get_api_messages()
-        path = self.session.save_session(messages)
-        self.chat_view.add_message(
-            "assistant",
-            f"💾 Session saved to `{path}`"
-        )
+        finally:
+            self._is_streaming = False
+            input_area.disabled = False
+            status_bar.update_connection(True)
+            input_area.focus()
 
-    def action_new_session(self):
-        """Start a new session."""
-        self.chat_view.clear_all()
-        self.context.reset()
-        self.session.new_session()
-        self.status_bar.set_tokens(0, self.context.max_tokens)
-        self.chat_view.add_message(
-            "assistant",
-            "## 🆕 New Session Started\\n\\nReady to help!",
-        )
-
-    def action_toggle_model(self):
-        """Toggle between chat and reasoner models."""
-        if self.client.model == "deepseek-chat":
-            self.client.model = "deepseek-reasoner"
-        else:
-            self.client.model = "deepseek-chat"
-        self.status_bar.set_model(self.client.model)
-        self.chat_view.add_message(
-            "assistant",
-            f"🔄 Switched to **{self.client.model}**",
-        )
-
-    def action_toggle_tools(self):
-        """Toggle tool calling on/off."""
-        self._tools_enabled = not self._tools_enabled
-        status = "enabled" if self._tools_enabled else "disabled"
-        self.chat_view.add_message(
-            "assistant",
-            f"🔧 Tools {status}",
-        )
+    def update_tokens_used(self, count: int):
+        """Update token count display."""
+        config = Config
+        status_bar = self.query_one("#status-bar", StatusBar)
+        status_bar.update_tokens(count, config.MAX_CONTEXT_TOKENS)
 
 
-def run():
-    app = DeepSeekTUI()
-    app.run()
+# Re-export for cleaner imports
+__all__ = ["DeepSeekApp"]

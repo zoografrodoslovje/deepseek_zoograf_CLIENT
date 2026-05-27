@@ -1,118 +1,117 @@
-"""Multi-line input widget with history navigation."""
-from textual.widgets import TextArea
-from textual.widget import Widget
+"""Input Area Widget - Multi-line input with history navigation"""
+
+from textual.app import ComposeResult
+from textual.widgets import Input, Button
+from textual.containers import Horizontal
 from textual.binding import Binding
-from textual import events
-from textual.message import Message
-from typing import Optional
 
 
-class InputArea(Widget):
-    """Multi-line input with command history and submit on Enter."""
+class InputArea(Horizontal):
+    """Custom input area with message history support."""
 
-    DEFAULT_CSS = """
-    InputArea {
-        height: auto;
-        min-height: 6;
-        max-height: 12;
-        background: #FFFFFF;
-        border-top: solid #E2E8F0;
-        padding: 1;
+    CSS = """
+    #input-area {
+        height: 3;
+        width: 1fr;
+        padding: 0 1;
+        background: $bg-light;
     }
 
-    InputArea > #chat-input {
-        background: #FFFFFF;
-        border: tall #CBD5E1;
-        padding: 1 2;
-        margin: 1 0;
-        color: #1E293B;
-        min-height: 3;
+    #input-field {
+        width: 1fr;
+        color: $text-primary;
     }
 
-    InputArea > #chat-input:focus {
-        border: tall #2563EB;
+    #send-btn {
+        margin-left: 1;
     }
     """
 
-    class Submitted(Message):
-        def __init__(self, text: str):
-            super().__init__()
-            self.text = text
+    BINDINGS = [
+        Binding("enter", "submit", "Send"),
+        Binding("shift+enter", "newline", "Newline"),
+        Binding("ctrl+k", "clear", "Clear"),
+    ]
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self._history: list[str] = []
         self._history_index: int = -1
-        self._input: Optional[TextArea] = None
+        self._has_sended: bool = False
 
-    def compose(self):
-        self._input = TextArea(
-            id="chat-input",
-            text="",
-            language=None,
-            theme="css",
-            soft_wrap=True,
-        )
-        self._input.border_title = " Message "
-        self._input.tooltip = "Type your message. Enter to send, Shift+Enter for newline, ↑/↓ for history"
-        yield self._input
+    def compose(self) -> ComposeResult:
+        yield Input(placeholder="Type your message...", id="input-field")
+        yield Button("Send", id="send-btn")
 
-    def on_mount(self):
-        if self._input:
-            self._input.focus()
-
-    def on_text_area_changed(self, event: TextArea.Changed):
-        if self._input:
-            line_count = self._input.text.count("\n") + 1
-            self._input.styles.height = min(max(3, line_count), 10)
-
-    def _submit(self):
-        if self._input:
-            text = self._input.text.strip()
-            if text:
-                self._history.append(text)
-                self._history_index = len(self._history)
-                self.post_message(self.Submitted(text))
-                self._input.text = ""
-
-    def _history_up(self):
-        if not self._history:
-            return
-        if self._history_index > 0:
-            self._history_index -= 1
-            if self._input:
-                self._input.text = self._history[self._history_index]
-                self._input.cursor = (len(self._input.text.split("\\n")[-1]), len(self._input.text.split("\\n")) - 1)
-
-    def _history_down(self):
-        if self._history_index < len(self._history) - 1:
-            self._history_index += 1
-            if self._input:
-                self._input.text = self._history[self._history_index]
-                self._input.cursor = (len(self._input.text.split("\\n")[-1]), len(self._input.text.split("\\n")) - 1)
-        else:
-            self._history_index = len(self._history)
-            if self._input:
-                self._input.text = ""
-
-    def key_enter(self):
-        self._submit()
-
-    def key_up(self):
-        self._history_up()
-
-    def key_down(self):
-        self._history_down()
-
-    def focus(self):
-        if self._input:
-            self._input.focus()
+    async def on_mount(self):
+        """Focus input field when mounted."""
+        await self.query_one("#input-field", Input).focus()
 
     @property
     def text(self) -> str:
-        return self._input.text if self._input else ""
+        """Get current input text."""
+        return self.query_one("#input-field", Input).value
 
     @text.setter
     def text(self, value: str):
-        if self._input:
-            self._input.text = value
+        """Set input text."""
+        self.query_one("#input-field", Input).value = value
+
+    def action_submit(self):
+        """Handle Enter key press."""
+        self.post_message("submit")
+
+    def action_newline(self):
+        """Handle Shift+Enter for new line."""
+        pass
+
+    def action_clear(self):
+        """Clear input field."""
+        self.text = ""
+        self._history_index = -1
+        self._has_sended = False
+
+    def get_text_and_reset(self) -> str | None:
+        """Get current text and reset. Returns None if empty."""
+        text = self.text.strip()
+        if not text:
+            return None
+
+        # Add to history only if different from last entry
+        if not self._history or self._history[-1] != text:
+            self._history.append(text)
+            self._history_index = len(self._history) - 1
+
+        self._has_sended = True
+        self.text = ""
+        return text
+
+    def restore_history_up(self) -> bool:
+        """Restore previous history item. Returns True if successful."""
+        if self._has_sended:
+            return False
+
+        if self._history_index > 0:
+            self._history_index -= 1
+            self.text = self._history[self._history_index]
+            return True
+        return False
+
+    def restore_history_down(self) -> bool:
+        """Restore next history item. Returns True if successful."""
+        if self._history_index >= len(self._history) - 1:
+            self._history_index = len(self._history) - 1
+            self.text = self._history[self._history_index] if self._history else ""
+            return True
+
+        if self._history_index < len(self._history) - 1:
+            self._history_index += 1
+            self.text = self._history[self._history_index]
+            return True
+
+        return False
+
+    def add_to_history(self, text: str):
+        """Manually add text to history."""
+        if text and (not self._history or self._history[-1] != text):
+            self._history.append(text)

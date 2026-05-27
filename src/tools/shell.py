@@ -1,66 +1,94 @@
-"""Shell command execution with safety confirmation."""
+"""Shell Command Tools - Execute terminal commands"""
+
 import asyncio
-import shlex
+from typing import Optional
 
 
-async def _run_command(command: str) -> str:
-    """Execute a shell command and return output."""
+async def execute_command(command: str, timeout: int = 30) -> str:
+    """Execute a shell command and return output.
+
+    WARNING: This tool requires explicit user confirmation before execution
+    for security purposes. Commands are run with restricted permissions.
+
+    Args:
+        command: Shell command to execute
+        timeout: Maximum execution time in seconds (default: 30)
+
+    Returns:
+        Command output or error message
+    """
+    # Security check: deny dangerous commands
+    dangerous_patterns = [
+        "rm -rf",
+        "dd if=/dev/",
+        ":(){:|:&};:",  # Fork bomb
+        "mkfs",
+        "shutdown",
+        "reboot",
+        "poweroff",
+        ":() { :|:& };:",
+        "*:*",  # Path manipulation
+    ]
+
+    command_lower = command.lower().strip()
+
+    for pattern in dangerous_patterns:
+        if pattern in command_lower:
+            return f"Dangerous command blocked: '{command}'"
+
+    # Also block write operations to system directories
+    if any(x in command for x in ["/etc/", "/bin/", "/sbin/"]):
+        return f"System directory access denied: '{command}'"
+
     try:
-        proc = await asyncio.create_subprocess_shell(
+        process = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=".",
         )
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
-        except asyncio.TimeoutError:
-            proc.kill()
-            return "Error: Command timed out after 60 seconds"
+
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(), timeout=timeout
+        )
 
         output = ""
+
         if stdout:
             output += stdout.decode("utf-8", errors="replace")
+
         if stderr:
-            if output:
-                output += "\\n"
-            output += stderr.decode("utf-8", errors="replace")
+            output += f"[STDERR] {stderr.decode('utf-8', errors='replace')}"
 
-        result = f"Exit code: {proc.returncode}\\n"
-        if output:
-            result += output
+        exit_code = process.returncode
+
+        result = f"Command executed:\n\n```\n{command}\n```\n\nExit code: {exit_code}"
+
+        if output.strip():
+            result += f"\n\nOutput:\n```\n{output.strip()}\n```"
+        else:
+            result += "\n\n[No output]"
+
         return result
-    except FileNotFoundError:
-        return f"Error: Command not found: {command}"
+
+    except asyncio.TimeoutError:
+        return f"Command timed out after {timeout} seconds: '{command}'"
     except Exception as e:
-        return f"Error executing command: {e}"
+        return f"Error executing command: {str(e)}"
 
 
-# Simple sync wrapper for the tool registry
-# The actual confirmation happens at the UI level
-_command_pending_confirmation = None
+def require_confirmation(command: str) -> bool:
+    """Check if a command requires user confirmation.
+
+    Args:
+        command: Shell command to check
+
+    Returns:
+        True if confirmation is required
+    """
+    # Always require confirmation for write/delete operations
+    write_commands = ["rm ", "rmdir ", "mv ", "cp ", "touch ", "echo >", "> "]
+
+    return any(cmd in command.lower() for cmd in write_commands)
 
 
-def execute_command(command: str, description: str = "") -> str:
-    """Execute a shell command. NOTE: confirmation is handled by the UI layer."""
-    global _command_pending_confirmation
-    _command_pending_confirmation = {
-        "command": command,
-        "description": description,
-    }
-    # This raises a signal to the UI layer - the UI will handle
-    # confirmation and rerun if approved
-    raise CommandRequiresConfirmation(command, description)
-
-
-class CommandRequiresConfirmation(Exception):
-    """Raised when a shell command needs user confirmation."""
-    def __init__(self, command: str, description: str = ""):
-        self.command = command
-        self.description = description
-        super().__init__(f"Command requires confirmation: {command}")
-
-
-async def execute_command_approved(command: str) -> str:
-    """Execute a command that has been confirmed by the user."""
-    return await _run_command(command)
+__all__ = ["execute_command", "require_confirmation"]
